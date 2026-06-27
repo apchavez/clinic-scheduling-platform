@@ -1,16 +1,20 @@
 import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 import type { Appointment } from "../../domain/entities/Appointment";
+import type { IMessageBus } from "../../domain/ports/IMessageBus";
 
-const sns = new SNSClient({});
-const topicArn = process.env.SNS_APPOINTMENTS_ARN!;
-export async function publishAppointment(message: Appointment): Promise<void> {
-  await sns.send(
-    new PublishCommand({
-      TopicArn: topicArn,
-      Message: JSON.stringify(message),
-      MessageAttributes: {
-        countryISO: { DataType: "String", StringValue: message.countryISO },
-      },
-    })
-  );
+export class SnsMessageBus implements IMessageBus {
+  private readonly sns = new SNSClient({});
+  private readonly topicArn = process.env.SNS_APPOINTMENTS_ARN!;
+
+  async publish(appointment: Appointment): Promise<void> {
+    await this.sns.send(
+      new PublishCommand({
+        TopicArn: this.topicArn,
+        Message: JSON.stringify(appointment),
+        MessageAttributes: {
+          countryISO: { DataType: "String", StringValue: appointment.countryISO },
+        },
+      })
+    );
+  }
 }

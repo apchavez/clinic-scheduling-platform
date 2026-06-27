@@ -1,16 +1,11 @@
 import { PutCommand, QueryCommand, UpdateCommand } from "@aws-sdk/lib-dynamodb";
 import type { Appointment } from "../../domain/entities/Appointment";
-import type {
-  AppointmentReadRepository,
-  AppointmentWriteRepository,
-} from "./AppointmentRepo";
+import type { IAppointmentStateRepo } from "../../domain/ports/IAppointmentStateRepo";
 import { ddb } from "../config/ddb";
 
 const TableName = process.env.TABLE_APPOINTMENTS!;
 
-export class AppointmentDynamoRepository
-  implements AppointmentReadRepository, AppointmentWriteRepository
-{
+export class DynamoAppointmentStateRepo implements IAppointmentStateRepo {
   async save(appointment: Appointment): Promise<void> {
     await ddb.send(
       new PutCommand({
@@ -21,7 +16,7 @@ export class AppointmentDynamoRepository
     );
   }
 
-  async consultByInsuredId(insuredId: string): Promise<Appointment[]> {
+  async listByInsured(insuredId: string): Promise<Appointment[]> {
     const res = await ddb.send(
       new QueryCommand({
         TableName,

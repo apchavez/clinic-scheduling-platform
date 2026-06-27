@@ -2,10 +2,10 @@
   "name": "appointments",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "offline": "serverless offline --host 0.0.0.0",
     "deploy": "serverless deploy",
     "remove": "serverless remove",
     "pretest": "tsc -p tsconfig.json",

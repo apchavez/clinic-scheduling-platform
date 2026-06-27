@@ -45,7 +45,7 @@ functions:
           arn: { Fn::GetAtt: [ConfirmationsQueue, Arn] }
           batchSize: 10
   appointmentPE:
-    handler: src/api/lambda/appointment_pe.handler
+    handler: src/api/lambda/appointment_country.handlerPE
     environment:
       RDS_PE_HOST:
         Fn::GetAtt: [RDSPE, Endpoint.Address]
@@ -56,7 +56,7 @@ functions:
     timeout: 30
     memorySize: 512
   appointmentCL:
-    handler: src/api/lambda/appointment_cl.handler
+    handler: src/api/lambda/appointment_country.handlerCL
     environment:
       RDS_CL_HOST:
         Fn::GetAtt: [RDSCL, Endpoint.Address]
@@ -133,11 +133,6 @@ provider:
         - Effect: Allow
           Action: kms:Decrypt
           Resource: arn:aws:kms:${self:provider.region}:${aws:accountId}:alias/aws/ssm
-        - Effect: Allow
-          Action:
-            - secretsmanager:GetSecretValue
-          Resource:
-            - { Ref: RdsMasterSecret }
 
 resources:
   Resources:
@@ -165,14 +160,30 @@ resources:
       Type: AWS::SNS::Topic
       Properties:
         TopicName: appointmentTopic
+    SQSPEDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: appointments-pe-dlq
+        MessageRetentionPeriod: 1209600
     SQSPE:
       Type: AWS::SQS::Queue
       Properties:
         QueueName: appointments-pe
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt SQSPEDLQ.Arn
+          maxReceiveCount: 3
+    SQSCLDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: appointments-cl-dlq
+        MessageRetentionPeriod: 1209600
     SQSCL:
       Type: AWS::SQS::Queue
       Properties:
         QueueName: appointments-cl
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt SQSCLDLQ.Arn
+          maxReceiveCount: 3
     TopicSubscriptionPE:
       Type: AWS::SNS::Subscription
       Properties:
@@ -223,10 +234,18 @@ resources:
       Type: AWS::Events::EventBus
       Properties:
         Name: appointments-bus
+    ConfirmationsDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: appointments-confirmaciones-dlq
+        MessageRetentionPeriod: 1209600
     ConfirmationsQueue:
       Type: AWS::SQS::Queue
       Properties:
         QueueName: appointments-confirmaciones
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt ConfirmationsDLQ.Arn
+          maxReceiveCount: 3
     EventRuleToSQS:
       Type: AWS::Events::Rule
       Properties:
@@ -248,10 +267,12 @@ resources:
               Principal: { Service: events.amazonaws.com }
               Action: sqs:SendMessage
               Resource: { Fn::GetAtt: [ConfirmationsQueue, Arn] }
+    # TODO: place appointmentPE/CL Lambdas inside the VPC, set RDS PubliclyAccessible: false,
+    # and restrict ingress to a Lambda security group (remove 0.0.0.0/0).
     RdsSecurityGroup:
       Type: AWS::EC2::SecurityGroup
       Properties:
-        GroupDescription: Allow MySQL inbound (demo)
+        GroupDescription: MySQL inbound — restrict to Lambda SG in production
         VpcId: ${self:custom.rds.vpcId}
         SecurityGroupIngress:
           - IpProtocol: tcp

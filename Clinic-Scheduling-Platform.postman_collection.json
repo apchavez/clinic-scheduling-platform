@@ -30,14 +30,10 @@
             },
             "url": {
               "raw": "{{baseUrl}}/appointments",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "appointments"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["appointments"]
             },
-            "description": "Creates a medical appointment request for Peru."
+            "description": "Creates a medical appointment for Peru. Returns the full Appointment object with status=pending."
           },
           "event": [
             {
@@ -45,20 +41,27 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Response status is successful', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 202]);",
+                  "pm.test('Status is 201 Created', function () {",
+                  "    pm.response.to.have.status(201);",
                   "});",
                   "",
-                  "pm.test('Response is JSON', function () {",
-                  "    pm.response.to.have.header('Content-Type');",
-                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+                  "pm.test('Content-Type is application/json', function () {",
+                  "    pm.expect(pm.response.headers.get('content-type')).to.include('application/json');",
                   "});",
                   "",
-                  "pm.test('Response body contains expected information', function () {",
+                  "pm.test('Response contains a valid Appointment object', function () {",
                   "    const json = pm.response.json();",
-                  "    pm.expect(json).to.be.an('object');",
-                  "    pm.expect(JSON.stringify(json).toLowerCase()).to.match(/pending|received|appointment|success|message/);",
-                  "});"
+                  "    pm.expect(json.appointmentUuid).to.be.a('string').and.not.empty;",
+                  "    pm.expect(json.insuredId).to.eql('12345');",
+                  "    pm.expect(json.scheduleId).to.eql(10);",
+                  "    pm.expect(json.countryISO).to.eql('PE');",
+                  "    pm.expect(json.status).to.eql('pending');",
+                  "    pm.expect(json.createdAt).to.be.a('string').and.not.empty;",
+                  "    pm.expect(json.updatedAt).to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set('lastAppointmentUuid', pm.response.json().appointmentUuid);",
+                  "pm.collectionVariables.set('lastInsuredId', '12345');"
                 ]
               }
             }
@@ -85,14 +88,10 @@
             },
             "url": {
               "raw": "{{baseUrl}}/appointments",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "appointments"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["appointments"]
             },
-            "description": "Creates a medical appointment request for Chile."
+            "description": "Creates a medical appointment for Chile. Returns the full Appointment object with status=pending."
           },
           "event": [
             {
@@ -100,13 +99,23 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Response status is successful', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 202]);",
+                  "pm.test('Status is 201 Created', function () {",
+                  "    pm.response.to.have.status(201);",
                   "});",
                   "",
-                  "pm.test('Response is JSON', function () {",
-                  "    pm.response.to.have.header('Content-Type');",
-                  "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+                  "pm.test('Content-Type is application/json', function () {",
+                  "    pm.expect(pm.response.headers.get('content-type')).to.include('application/json');",
+                  "});",
+                  "",
+                  "pm.test('Response contains a valid Appointment object', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.appointmentUuid).to.be.a('string').and.not.empty;",
+                  "    pm.expect(json.insuredId).to.eql('67890');",
+                  "    pm.expect(json.scheduleId).to.eql(20);",
+                  "    pm.expect(json.countryISO).to.eql('CL');",
+                  "    pm.expect(json.status).to.eql('pending');",
+                  "    pm.expect(json.createdAt).to.be.a('string').and.not.empty;",
+                  "    pm.expect(json.updatedAt).to.be.a('string').and.not.empty;",
                   "});"
                 ]
               }
@@ -114,7 +123,51 @@
           ]
         },
         {
-          "name": "Create Appointment - Invalid Payload",
+          "name": "List Appointments by Insured",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/appointments/{{lastInsuredId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["appointments", "{{lastInsuredId}}"]
+            },
+            "description": "Returns all appointments for a given insuredId, ordered by creation date descending. Uses the insuredId saved by the last Create request."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200 OK', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Content-Type is application/json', function () {",
+                  "    pm.expect(pm.response.headers.get('content-type')).to.include('application/json');",
+                  "});",
+                  "",
+                  "pm.test('Response is an array', function () {",
+                  "    pm.expect(pm.response.json()).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('Each item has required Appointment fields', function () {",
+                  "    const items = pm.response.json();",
+                  "    items.forEach(function (item) {",
+                  "        pm.expect(item.appointmentUuid).to.be.a('string').and.not.empty;",
+                  "        pm.expect(item.insuredId).to.be.a('string').and.not.empty;",
+                  "        pm.expect(item.status).to.be.oneOf(['pending', 'completed']);",
+                  "        pm.expect(item.countryISO).to.be.oneOf(['PE', 'CL']);",
+                  "    });",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Appointment - Missing Fields (400)",
           "request": {
             "method": "POST",
             "header": [
@@ -134,14 +187,10 @@
             },
             "url": {
               "raw": "{{baseUrl}}/appointments",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "appointments"
-              ]
+              "host": ["{{baseUrl}}"],
+              "path": ["appointments"]
             },
-            "description": "Negative test case to validate API error handling."
+            "description": "Negative test: missing insuredId and null scheduleId should return 400 with a message field."
           },
           "event": [
             {
@@ -149,8 +198,58 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('Invalid payload returns client error', function () {",
-                  "    pm.expect(pm.response.code).to.be.oneOf([400, 422]);",
+                  "pm.test('Status is 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Response contains a message field', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.message).to.be.a('string').and.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Appointment - Invalid countryISO (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"insuredId\": \"12345\",\n  \"scheduleId\": 10,\n  \"countryISO\": \"XX\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/appointments",
+              "host": ["{{baseUrl}}"],
+              "path": ["appointments"]
+            },
+            "description": "Negative test: countryISO must be PE or CL."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400 Bad Request', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Error message mentions countryISO', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.message).to.include('countryISO');",
                   "});"
                 ]
               }
@@ -163,8 +262,21 @@
   "variable": [
     {
       "key": "baseUrl",
-      "value": "https://your-api-id.execute-api.us-east-1.amazonaws.com/dev",
-      "type": "string"
+      "value": "https://your-api-id.execute-api.us-east-1.amazonaws.com",
+      "type": "string",
+      "description": "Base URL without stage. For local: http://localhost:3000"
+    },
+    {
+      "key": "lastInsuredId",
+      "value": "",
+      "type": "string",
+      "description": "Set automatically by the Create Appointment - PE test."
+    },
+    {
+      "key": "lastAppointmentUuid",
+      "value": "",
+      "type": "string",
+      "description": "Set automatically by the Create Appointment - PE test."
     }
   ]
 }

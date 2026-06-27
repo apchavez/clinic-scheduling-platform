@@ -1,9 +1,9 @@
 import mysql from "mysql2/promise";
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 import type { Appointment } from "../../domain/entities/Appointment";
-import type { AppointmentRdsRepository } from "./AppointmentRepo";
+import type { ICountryBookingRepo } from "../../domain/ports/ICountryBookingRepo";
+import type { CountryISO } from "../../domain/types";
 
-type Country = "PE" | "CL";
 const ssm = new SSMClient({});
 let cachedPassword: string | null = null;
 
@@ -23,7 +23,7 @@ async function getPassword(): Promise<string> {
   return cachedPassword;
 }
 
-function cfg(country: Country) {
+function cfg(country: CountryISO) {
   return {
     host: process.env[country === "PE" ? "RDS_PE_HOST" : "RDS_CL_HOST"]!,
     port: Number(
@@ -35,9 +35,9 @@ function cfg(country: Country) {
   };
 }
 
-const pools: Partial<Record<Country, mysql.Pool>> = {};
+const pools: Partial<Record<CountryISO, mysql.Pool>> = {};
 
-async function getPool(country: Country): Promise<mysql.Pool> {
+async function getPool(country: CountryISO): Promise<mysql.Pool> {
   if (pools[country]) return pools[country];
   const password = await getPassword();
   const { host, port, user, database } = cfg(country);
@@ -59,9 +59,9 @@ async function getPool(country: Country): Promise<mysql.Pool> {
   return pool;
 }
 
-export class AppointmentRdsRepositoryImpl implements AppointmentRdsRepository {
-  async writeByCountry(appointment: Appointment): Promise<void> {
-    const pool = await getPool(appointment.countryISO as Country);
+export class MySQLCountryBookingRepo implements ICountryBookingRepo {
+  async book(appointment: Appointment): Promise<void> {
+    const pool = await getPool(appointment.countryISO);
     const sql = `
       INSERT INTO appointments (appointment_uuid, insured_id, schedule_id, country_iso, status, created_at)
       VALUES (?, ?, ?, ?, ?, ?)

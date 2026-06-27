@@ -1,14 +1,5 @@
-export interface IMessageBus {
-  publishAppointmentRequested(payload: {
-    appointmentUuid: string;
-    insuredId: string;
-    scheduleId: number;
-    countryISO: "PE" | "CL";
-  }): Promise<void>;
+import { Appointment } from "../entities/Appointment";
 
-  publishAppointmentCompleted(payload: {
-    appointmentUuid: string;
-    insuredId: string;
-    countryISO: "PE" | "CL";
-  }): Promise<void>;
+export interface IMessageBus {
+  publish(appointment: Appointment): Promise<void>;
 }

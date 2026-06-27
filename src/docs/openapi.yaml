@@ -60,10 +60,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
               examples:
-                faltanCampos:
+                missingFields:
                   value:
                     {
-                      error: "insuredId, scheduleId and countryISO are required",
+                      message: "insuredId, scheduleId and countryISO are required",
                     }
         "500":
           description: Internal error
@@ -112,8 +112,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
               examples:
-                invalido:
-                  value: { error: "insuredId required" }
+                missingParam:
+                  value: { message: "insuredId required" }
         "500":
           description: Internal error
           content:
@@ -149,6 +149,7 @@ components:
         - countryISO
         - status
         - createdAt
+        - updatedAt
       properties:
         appointmentUuid:
           type: string
@@ -179,9 +180,14 @@ components:
           format: date-time
           description: Creation date in ISO 8601 (UTC)
           example: "2025-09-13T14:12:00.000Z"
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last update date in ISO 8601 (UTC)
+          example: "2025-09-13T14:12:00.000Z"
     ErrorResponse:
       type: object
-      required: [error]
+      required: [message]
       properties:
-        error:
+        message:
           type: string

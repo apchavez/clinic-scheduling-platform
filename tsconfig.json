@@ -9,15 +9,7 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "skipLibCheck": true,
-    "baseUrl": "src",
-    "paths": {
-      "@domain/*": ["domain/*"],
-      "@app/*": ["app/*"],
-      "@infra/*": ["infra/*"],
-      "@api/*": ["api/*"],
-      "@shared/*": ["shared/*"]
-    }
+    "skipLibCheck": true
   },
   "include": ["src", "tests"],
   "exclude": ["node_modules", "dist", ".serverless", ".esbuild"]

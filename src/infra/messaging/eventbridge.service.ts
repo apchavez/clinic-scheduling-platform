@@ -6,7 +6,7 @@ import {
 const eb = new EventBridgeClient({});
 const eventBusName = process.env.EB_BUS_NAME!;
 
-type Source = "appointment.pe" | "appointment.cl";
+export type Source = "appointment.pe" | "appointment.cl";
 interface ConfirmDetail {
   appointmentUuid: string;
 }
