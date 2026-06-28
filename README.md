@@ -10,22 +10,25 @@ This project simulates a production-grade healthcare booking workflow using asyn
 
 ## Tech Stack
 
-- TypeScript
-- Node.js
-- AWS Lambda
-- API Gateway (HTTP API)
-- DynamoDB
-- MySQL (RDS)
-- SNS
-- SQS
-- EventBridge
-- Serverless Framework v3
-- Jest
-- OpenAPI / Swagger
+| Layer | Technology |
+|---|---|
+| Language | TypeScript / Node.js 20 |
+| Runtime | AWS Lambda (nodejs20.x, arm64) |
+| API | API Gateway HTTP API |
+| State store | DynamoDB |
+| Relational store | MySQL 8 on RDS (per-country) |
+| Messaging | SNS → SQS fan-out |
+| Event bus | EventBridge |
+| IaC / Deploy | Serverless Framework v3 |
+| Local dev | serverless-offline, Docker |
+| Testing | Jest + ts-jest |
+| Docs | OpenAPI / Swagger |
 
 ---
 
 ## Architecture
+
+> **This project uses serverless architecture on AWS Lambda. Kubernetes does not apply.**
 
 The application follows **Clean Architecture** principles:
 
@@ -33,6 +36,34 @@ The application follows **Clean Architecture** principles:
 - **Application layer** — Use cases (`AppointmentService`)
 - **Infrastructure layer** — Adapters for DynamoDB, MySQL, SNS, and EventBridge
 - **API layer** — AWS Lambda handlers
+
+### Serverless Event Flow
+
+```text
+Client
+  ↓
+API Gateway (HTTP API)
+  ↓
+createAppointment Lambda
+  ↓  saves status=pending
+DynamoDB
+  ↓  publishes with countryISO MessageAttribute
+SNS Topic (appointmentTopic)
+  ↓  filtered by countryISO → PE or CL queue
+SQS (appointments-pe / appointments-cl)
+  ↓  country worker Lambda
+MySQL RDS (country-specific DB)
+  ↓  publishes AppointmentConfirmed
+EventBridge (appointments-bus)
+  ↓
+SQS (appointments-confirmaciones)
+  ↓
+confirmAppointment Lambda
+  ↓  updates status=completed
+DynamoDB
+```
+
+Failed messages after 3 retries are routed to a Dead Letter Queue (14-day retention) per SQS queue.
 
 ---
 
@@ -48,8 +79,7 @@ src/
 ├── docs/
 │   └── openapi.yaml            OpenAPI contract
 ├── domain/
-│   ├── entities/
-│   │   └── Appointment.ts
+│   ├── entities/Appointment.ts
 │   ├── ports/
 │   │   ├── IAppointmentStateRepo.ts
 │   │   ├── ICountryBookingRepo.ts
@@ -59,7 +89,7 @@ src/
 │   ├── config/ddb.ts           DynamoDB client
 │   ├── messaging/
 │   │   ├── eventbridge.service.ts
-│   │   └── sns.service.ts      SnsMessageBus (implements IMessageBus)
+│   │   └── sns.service.ts
 │   ├── repos/
 │   │   ├── DynamoAppointmentStateRepo.ts
 │   │   └── MySQLCountryBookingRepo.ts
@@ -67,40 +97,15 @@ src/
 │   └── secrets-init.ts         CloudFormation custom resource — seeds SSM password
 └── shared/
     └── http.ts                 HTTP response helpers
+postman/
+├── clinic-scheduling-platform.postman_collection.json
+├── clinic-scheduling-platform.local.postman_environment.json
+└── clinic-scheduling-platform.dev.postman_environment.json
 tests/
 ├── appointment.handler.unit.test.ts
-└── appointment.service.unit.test.ts
+├── appointment.service.unit.test.ts
+└── appointment_country.unit.test.ts
 ```
-
----
-
-## Main Workflow
-
-```text
-Client
-  ↓
-API Gateway (HTTP API)
-  ↓
-createAppointment Lambda
-  ↓  saves status=pending
-DynamoDB
-  ↓  publishes with countryISO MessageAttribute
-SNS Topic
-  ↓  filtered by countryISO → PE or CL queue
-SQS (appointments-pe / appointments-cl)
-  ↓  country worker Lambda
-MySQL RDS (country-specific DB)
-  ↓  publishes AppointmentConfirmed
-EventBridge
-  ↓
-SQS (appointments-confirmaciones)
-  ↓
-confirmAppointment Lambda
-  ↓  updates status=completed
-DynamoDB
-```
-
-Failed messages after 3 retries are routed to a Dead Letter Queue (14-day retention) for each SQS queue.
 
 ---
 
@@ -169,13 +174,25 @@ GET /appointments/{insuredId}
 
 ---
 
-## OpenAPI
+## Environment Variables
 
-Full contract at `src/docs/openapi.yaml`. Generate a static HTML doc with:
+The following environment variables are injected by Serverless Framework at deploy time via CloudFormation references. No real values are hardcoded.
 
-```bash
-npm run docs
-```
+| Variable | Description |
+|---|---|
+| `TABLE_APPOINTMENTS` | DynamoDB table name |
+| `SNS_APPOINTMENTS_ARN` | SNS topic ARN |
+| `EB_BUS_NAME` | EventBridge bus name |
+| `SQS_PE_URL` / `SQS_PE_ARN` | SQS queue for Peru |
+| `SQS_CL_URL` / `SQS_CL_ARN` | SQS queue for Chile |
+| `CONFIRMATIONS_SQS_URL` / `CONFIRMATIONS_SQS_ARN` | Confirmations queue |
+| `RDS_PE_HOST_SSM` / `RDS_CL_HOST_SSM` | SSM parameter paths for RDS host |
+| `RDS_PASSWORD_SSM` | SSM parameter path for RDS password |
+| `RDS_USER` | RDS username |
+| `RDS_PE_PORT` / `RDS_CL_PORT` | RDS port (default 3306) |
+| `RDS_PE_DATABASE` / `RDS_CL_DATABASE` | Database names per country |
+
+For local development with serverless-offline, set the variables you need in a `.env` file (not committed).
 
 ---
 
@@ -187,32 +204,92 @@ npm run docs
 npm install
 ```
 
-### Run tests
+### Run locally (serverless-offline)
 
 ```bash
-npm test
+npm run offline
+# API available at http://localhost:3000
 ```
+
+The Dockerfile in the project root wraps this command for convenience:
+
+```bash
+docker build -t clinic-scheduling-platform .
+docker run -p 3000:3000 clinic-scheduling-platform
+```
+
+> Docker is provided for local development only. The production deployment is serverless via AWS Lambda.
 
 ### Build
 
 ```bash
 npm run build
+# Output: dist/
 ```
 
-### Run locally (serverless-offline)
+---
+
+## Testing
+
+Unit tests cover:
+
+- Lambda handler validation and routing (`appointment.handler.unit.test.ts`)
+- Service layer: DynamoDB writes and SNS publish (`appointment.service.unit.test.ts`)
+- Country worker handlers: SQS processing and EventBridge confirmation (`appointment_country.unit.test.ts`)
 
 ```bash
-npm run offline
+npm test
+```
+
+### Coverage
+
+```bash
+npm run test:coverage
+# Reports to: coverage/
+```
+
+Coverage is enforced at **80% minimum** (statements, branches, functions, lines). Infrastructure adapters that require real AWS connections (MySQL, CloudFormation custom resources) are excluded from the threshold.
+
+---
+
+## Postman
+
+The `postman/` folder contains the collection and two environments.
+
+| File | Purpose |
+|---|---|
+| `clinic-scheduling-platform.postman_collection.json` | All requests with inline test scripts |
+| `clinic-scheduling-platform.local.postman_environment.json` | `baseUrl = http://localhost:3000` (serverless-offline) |
+| `clinic-scheduling-platform.dev.postman_environment.json` | `baseUrl = https://change-me.execute-api.region.amazonaws.com/dev` |
+
+Import both the collection and the desired environment into Postman, activate the environment, then run the collection.
+
+---
+
+## OpenAPI
+
+Full contract at `src/docs/openapi.yaml`. Generate a static HTML doc with:
+
+```bash
+npm run docs
+# Output: docs/swagger.html
 ```
 
 ---
 
 ## Deploy
 
-### Configure VPC values
+### Prerequisites
 
-```bash
-# Edit serverless.yml → custom.rds.vpcId / subnet1 / subnet2
+1. Configure your AWS credentials (`aws configure` or environment variables).
+2. Update VPC/subnet values in `serverless.yml` → `custom.rds`:
+
+```yaml
+custom:
+  rds:
+    vpcId: vpc-xxxxxxxxxxxxxxx
+    subnet1: subnet-xxxxxxxxxxxxxxx
+    subnet2: subnet-xxxxxxxxxxxxxxx
 ```
 
 ### Deploy stack
@@ -227,6 +304,8 @@ npx serverless deploy
 npx serverless remove
 ```
 
+> No automated deploy pipeline is configured. All deployments are triggered manually.
+
 ---
 
 ## Logs
@@ -240,16 +319,15 @@ npx serverless logs -f confirmAppointment -t
 
 ---
 
-## Testing
+## GitHub Actions / CI
 
-Unit tests cover:
+CI runs on every push and pull request to `main`.
 
-- Lambda handler validation and routing (`appointment.handler.unit.test.ts`)
-- Service layer: DynamoDB writes and SNS publish (`appointment.service.unit.test.ts`)
+Pipeline: `install → lint → build → test → coverage`
 
-```bash
-npm test
-```
+No AWS credentials are required. No automatic deploy is performed.
+
+See `.github/workflows/ci.yml`.
 
 ---
 
@@ -262,13 +340,14 @@ npm test
 - Dead Letter Queues for reliability
 - Typed Lambda events (`APIGatewayProxyEvent`, `SQSEvent`)
 - AWS Serverless Framework with CloudFormation custom resources
+- Unit testing with mocked AWS SDK clients (`aws-sdk-client-mock`)
+- Jest coverage enforcement at 80% threshold
 
 ---
 
 ## Future Improvements
 
 - Authentication / RBAC
-- CI/CD pipeline (GitHub Actions)
 - Place worker Lambdas inside the VPC — enables `PubliclyAccessible: false` on RDS and security group restriction to Lambda SG only
 - Integration tests against real AWS resources
 - CloudWatch alarms on DLQ depth

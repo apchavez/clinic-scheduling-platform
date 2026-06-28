@@ -7,4 +7,20 @@ module.exports = {
   moduleNameMapper: { "^(\\.{1,2}/.*)\\.js$": "$1" },
   roots: ["<rootDir>/tests", "<rootDir>/src"],
   testMatch: ["**/?(*.)+(spec|test).ts"],
+  collectCoverageFrom: [
+    "src/**/*.ts",
+    "!src/infra/db-init.ts",
+    "!src/infra/secrets-init.ts",
+    "!src/infra/repos/MySQLCountryBookingRepo.ts",
+    "!src/infra/messaging/eventbridge.service.ts",
+  ],
+  coverageDirectory: "coverage",
+  coverageThreshold: {
+    global: {
+      statements: 80,
+      branches: 80,
+      functions: 80,
+      lines: 80,
+    },
+  },
 };

@@ -262,9 +262,9 @@
   "variable": [
     {
       "key": "baseUrl",
-      "value": "https://your-api-id.execute-api.us-east-1.amazonaws.com",
+      "value": "",
       "type": "string",
-      "description": "Base URL without stage. For local: http://localhost:3000"
+      "description": "Base URL — set via an active environment (local or dev)."
     },
     {
       "key": "lastInsuredId",

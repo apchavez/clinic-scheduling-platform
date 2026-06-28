@@ -94,9 +94,9 @@ reports/
 *.lcov
 
 # =========================
-# Postman local exports (optional)
+# Postman
 # =========================
-postman/*.local.json
+# All postman/ files are committed (no secrets — only localhost and placeholder URLs).
 
 # =========================
 # Misc

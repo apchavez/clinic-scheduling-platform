@@ -1,5 +1,5 @@
 {
-  "name": "appointments",
+  "name": "clinic-scheduling-platform",
   "version": "1.0.0",
   "private": true,
   "main": "dist/index.js",
@@ -10,6 +10,7 @@
     "remove": "serverless remove",
     "pretest": "tsc -p tsconfig.json",
     "test": "jest --passWithNoTests",
+    "test:coverage": "jest --coverage",
     "docs": "redoc-cli bundle ./src/docs/openapi.yaml -o ./docs/swagger.html"
   },
   "dependencies": {
