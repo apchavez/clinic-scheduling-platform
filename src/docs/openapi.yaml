@@ -18,6 +18,8 @@ servers:
 tags:
   - name: Appointments
     description: Appointment creation and consultation operations
+security:
+  - BearerAuth: []
 paths:
   /appointments:
     post:
@@ -65,6 +67,12 @@ paths:
                     {
                       message: "insuredId, scheduleId and countryISO are required",
                     }
+        "401":
+          description: Missing or invalid Bearer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           description: Internal error
           content:
@@ -114,6 +122,12 @@ paths:
               examples:
                 missingParam:
                   value: { message: "insuredId required" }
+        "401":
+          description: Missing or invalid Bearer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           description: Internal error
           content:
@@ -121,6 +135,14 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        HS256 JWT signed with the secret stored in SSM at /appointments/jwt/secret.
+        Generate a token with: signJwt(sub, secret, expiresInSeconds) from src/infra/jwt.ts.
   schemas:
     CreateAppointmentRequest:
       type: object

@@ -115,6 +115,32 @@ tests/
 
 ---
 
+## Authentication
+
+All HTTP endpoints require a Bearer JWT token in the `Authorization` header.
+
+```
+Authorization: Bearer <token>
+```
+
+Tokens are **HS256** JWTs signed with a secret stored in SSM at `/appointments/jwt/secret`. The secret is generated automatically on first deploy by the `JwtSecretInit` CloudFormation custom resource.
+
+**Generate a token (dev/testing):**
+
+```typescript
+import { signJwt } from "./src/infra/jwt";
+
+const token = signJwt(
+  "01234",              // sub — identifies the caller
+  "<secret-from-ssm>", // retrieve with: aws ssm get-parameter --name /appointments/jwt/secret --with-decryption
+  3600                 // expires in seconds (default: 1 hour)
+);
+```
+
+The Lambda Authorizer (`src/api/lambda/authorizer.ts`) validates the token on every request. The authorizer result is cached by API Gateway for 5 minutes per token to avoid repeated SSM and verification overhead.
+
+---
+
 ## API
 
 ### Create appointment
@@ -351,14 +377,15 @@ See `.github/workflows/ci.yml`.
 - 500 error handling at the Lambda boundary — unhandled exceptions never bubble as uncaught rejections
 - Typed Lambda events (`APIGatewayProxyEvent`, `SQSEvent`, `CloudFormationCustomResourceEvent`)
 - AWS Serverless Framework with CloudFormation custom resources for DB and secrets bootstrap
+- JWT Bearer auth via HTTP API Lambda Authorizer — HS256, `timingSafeEqual`, SSM-backed secret, 300 s result cache
 - Unit testing with mocked AWS SDK clients (`aws-sdk-client-mock`) and plain interface mocks
-- Jest coverage enforcement at 80% threshold across 26 tests in 4 suites
+- Jest coverage enforcement at 80% threshold across 39 tests in 6 suites
 
 ---
 
 ## Future Improvements
 
-- Authentication / RBAC
+- RBAC — extend JWT payload with `role` claim and enforce per-endpoint
 - Place worker Lambdas inside the VPC — enables `PubliclyAccessible: false` on RDS and security group restriction to Lambda SG only
 - Integration tests against real AWS resources
 - CloudWatch alarms on DLQ depth

@@ -18,6 +18,10 @@ custom:
     subnet2: ${env:RDS_SUBNET_2, "subnet-xxxxxxxxxxxxxxx"}
 
 functions:
+  authorize:
+    handler: src/api/lambda/authorizer.handler
+    memorySize: 128
+    timeout: 5
   dbInit:
     handler: src/infra/db-init.handler
     timeout: 300
@@ -32,12 +36,16 @@ functions:
       - httpApi:
           path: /appointments
           method: post
+          authorizer:
+            name: jwtAuth
   listByInsured:
     handler: src/api/lambda/appointment.listByInsured
     events:
       - httpApi:
           path: /appointments/{insuredId}
           method: get
+          authorizer:
+            name: jwtAuth
   confirmAppointment:
     handler: src/api/lambda/appointment.confirmAppointment
     events:
@@ -77,8 +85,17 @@ provider:
   region: us-east-1
   architecture: arm64
   logRetentionInDays: 7
+  httpApi:
+    authorizers:
+      jwtAuth:
+        type: request
+        functionName: authorize
+        enableSimpleResponses: true
+        identitySource: $request.header.Authorization
+        resultTtlInSeconds: 300
   environment:
     TABLE_APPOINTMENTS: { Ref: AppointmentsTable }
+    JWT_SECRET_SSM: /appointments/jwt/secret
     RDS_PE_HOST_SSM: /appointments/rds/pe/host
     RDS_CL_HOST_SSM: /appointments/rds/cl/host
     RDS_PASSWORD_SSM: /appointments/rds/password
@@ -130,7 +147,9 @@ provider:
             Fn::GetAtt: [AppointmentBus, Arn]
         - Effect: Allow
           Action: ssm:GetParameter
-          Resource: arn:aws:ssm:${self:provider.region}:${aws:accountId}:parameter/appointments/rds/*
+          Resource:
+            - arn:aws:ssm:${self:provider.region}:${aws:accountId}:parameter/appointments/rds/*
+            - arn:aws:ssm:${self:provider.region}:${aws:accountId}:parameter/appointments/jwt/*
         - Effect: Allow
           Action: kms:Decrypt
           Resource: arn:aws:kms:${self:provider.region}:${aws:accountId}:alias/aws/ssm
@@ -291,9 +310,12 @@ resources:
       Type: Custom::PasswordToSSM
       Properties:
         ServiceToken: { Fn::GetAtt: [SecretsInitLambdaFunction, Arn] }
-        Action: copySecretToSsm
-        SecretArn: { Ref: RdsMasterSecret }
-        SsmName: /appointments/rds/password
+        PasswordParamName: /appointments/rds/password
+    JwtSecretInit:
+      Type: Custom::PasswordToSSM
+      Properties:
+        ServiceToken: { Fn::GetAtt: [SecretsInitLambdaFunction, Arn] }
+        PasswordParamName: /appointments/jwt/secret
     DbInit:
       Type: Custom::DbInit
       Properties:
