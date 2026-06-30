@@ -51,6 +51,7 @@ async function getPool(country: CountryISO): Promise<mysql.Pool> {
     database,
     waitForConnections: true,
     connectionLimit: 2,
+    ssl: { rejectUnauthorized: true },
   });
   pools[country] = pool;
   return pool;

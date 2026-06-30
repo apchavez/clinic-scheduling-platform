@@ -63,6 +63,13 @@ functions:
           batchSize: 10
     timeout: 30
     memorySize: 512
+    # NOTE: Lambda in VPC requires a NAT Gateway or VPC Endpoints for DynamoDB/SNS/SQS/SSM/X-Ray.
+    vpc:
+      securityGroupIds:
+        - !Ref LambdaSecurityGroup
+      subnetIds:
+        - ${self:custom.rds.subnet1}
+        - ${self:custom.rds.subnet2}
   appointmentCL:
     handler: src/api/lambda/appointment_country.handlerCL
     environment:
@@ -74,6 +81,13 @@ functions:
           batchSize: 10
     timeout: 30
     memorySize: 512
+    # NOTE: Lambda in VPC requires a NAT Gateway or VPC Endpoints for DynamoDB/SNS/SQS/SSM/X-Ray.
+    vpc:
+      securityGroupIds:
+        - !Ref LambdaSecurityGroup
+      subnetIds:
+        - ${self:custom.rds.subnet1}
+        - ${self:custom.rds.subnet2}
 
 plugins:
   - serverless-esbuild
@@ -300,18 +314,24 @@ resources:
               Principal: { Service: events.amazonaws.com }
               Action: sqs:SendMessage
               Resource: { Fn::GetAtt: [ConfirmationsQueue, Arn] }
-    # TODO: place appointmentPE/CL Lambdas inside the VPC, set RDS PubliclyAccessible: false,
-    # and restrict ingress to a Lambda security group (remove 0.0.0.0/0).
+    LambdaSecurityGroup:
+      Type: AWS::EC2::SecurityGroup
+      Properties:
+        GroupDescription: Security group for Lambda functions
+        VpcId: ${self:custom.rds.vpcId}
+        SecurityGroupEgress:
+          - IpProtocol: "-1"
+            CidrIp: 0.0.0.0/0
     RdsSecurityGroup:
       Type: AWS::EC2::SecurityGroup
       Properties:
-        GroupDescription: MySQL inbound — restrict to Lambda SG in production
+        GroupDescription: MySQL inbound — Lambda SG only
         VpcId: ${self:custom.rds.vpcId}
         SecurityGroupIngress:
           - IpProtocol: tcp
             FromPort: 3306
             ToPort: 3306
-            CidrIp: 0.0.0.0/0
+            SourceSecurityGroupId: !Ref LambdaSecurityGroup
     RdsSubnetGroup:
       Type: AWS::RDS::DBSubnetGroup
       Properties:
@@ -356,7 +376,7 @@ resources:
         MasterUsername: ${self:provider.environment.RDS_USER}
         MasterUserPassword: "{{resolve:ssm-secure:/appointments/rds/password}}"
         DBName: ${self:provider.environment.RDS_PE_DATABASE}
-        PubliclyAccessible: true
+        PubliclyAccessible: false
         VPCSecurityGroups:
           - Fn::GetAtt: [RdsSecurityGroup, GroupId]
         DBSubnetGroupName:
@@ -376,7 +396,7 @@ resources:
         MasterUsername: ${self:provider.environment.RDS_USER}
         MasterUserPassword: "{{resolve:ssm-secure:/appointments/rds/password}}"
         DBName: ${self:provider.environment.RDS_CL_DATABASE}
-        PubliclyAccessible: true
+        PubliclyAccessible: false
         VPCSecurityGroups:
           - Fn::GetAtt: [RdsSecurityGroup, GroupId]
         DBSubnetGroupName:
