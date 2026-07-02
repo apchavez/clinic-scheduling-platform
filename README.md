@@ -422,7 +422,7 @@ npx serverless deploy
 npx serverless remove
 ```
 
-> No automated deploy pipeline is configured. All deployments are triggered manually.
+> `deploy.yml` deploys automatically to `dev`/`us-east-1` whenever `CI` completes successfully on `main`. It can also be triggered manually via `workflow_dispatch` with a chosen `stage` (dev/staging/prod) and `region`. Required secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`.
 
 ---
 

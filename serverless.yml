@@ -103,6 +103,9 @@ provider:
     lambda: true
     apiGateway: true
   httpApi:
+    throttle:
+      burstLimit: 50
+      rateLimit: 25
     authorizers:
       jwtAuth:
         type: request
@@ -207,11 +210,13 @@ resources:
       Type: AWS::SNS::Topic
       Properties:
         TopicName: appointmentTopic
+        KmsMasterKeyId: alias/aws/sns
     SQSPEDLQ:
       Type: AWS::SQS::Queue
       Properties:
         QueueName: appointments-pe-dlq
         MessageRetentionPeriod: 1209600
+        KmsMasterKeyId: alias/aws/sqs
     SQSPE:
       Type: AWS::SQS::Queue
       Properties:
@@ -219,11 +224,13 @@ resources:
         RedrivePolicy:
           deadLetterTargetArn: !GetAtt SQSPEDLQ.Arn
           maxReceiveCount: 3
+        KmsMasterKeyId: alias/aws/sqs
     SQSCLDLQ:
       Type: AWS::SQS::Queue
       Properties:
         QueueName: appointments-cl-dlq
         MessageRetentionPeriod: 1209600
+        KmsMasterKeyId: alias/aws/sqs
     SQSCL:
       Type: AWS::SQS::Queue
       Properties:
@@ -231,6 +238,7 @@ resources:
         RedrivePolicy:
           deadLetterTargetArn: !GetAtt SQSCLDLQ.Arn
           maxReceiveCount: 3
+        KmsMasterKeyId: alias/aws/sqs
     TopicSubscriptionPE:
       Type: AWS::SNS::Subscription
       Properties:
@@ -286,6 +294,7 @@ resources:
       Properties:
         QueueName: appointments-confirmaciones-dlq
         MessageRetentionPeriod: 1209600
+        KmsMasterKeyId: alias/aws/sqs
     ConfirmationsQueue:
       Type: AWS::SQS::Queue
       Properties:
@@ -293,6 +302,7 @@ resources:
         RedrivePolicy:
           deadLetterTargetArn: !GetAtt ConfirmationsDLQ.Arn
           maxReceiveCount: 3
+        KmsMasterKeyId: alias/aws/sqs
     EventRuleToSQS:
       Type: AWS::Events::Rule
       Properties:
@@ -319,9 +329,6 @@ resources:
       Properties:
         GroupDescription: Security group for Lambda functions
         VpcId: ${self:custom.rds.vpcId}
-        SecurityGroupEgress:
-          - IpProtocol: "-1"
-            CidrIp: 0.0.0.0/0
     RdsSecurityGroup:
       Type: AWS::EC2::SecurityGroup
       Properties:
@@ -332,6 +339,41 @@ resources:
             FromPort: 3306
             ToPort: 3306
             SourceSecurityGroupId: !Ref LambdaSecurityGroup
+    LambdaEgressToRds:
+      Type: AWS::EC2::SecurityGroupEgress
+      Properties:
+        GroupId: !Ref LambdaSecurityGroup
+        IpProtocol: tcp
+        FromPort: 3306
+        ToPort: 3306
+        DestinationSecurityGroupId: !Ref RdsSecurityGroup
+    LambdaEgressHttps:
+      Type: AWS::EC2::SecurityGroupEgress
+      Properties:
+        GroupId: !Ref LambdaSecurityGroup
+        IpProtocol: tcp
+        FromPort: 443
+        ToPort: 443
+        CidrIp: 0.0.0.0/0
+        Description: "HTTPS to AWS service endpoints (DynamoDB, SNS, SQS, SSM, X-Ray) via NAT gateway or VPC endpoints"
+    LambdaEgressDnsTcp:
+      Type: AWS::EC2::SecurityGroupEgress
+      Properties:
+        GroupId: !Ref LambdaSecurityGroup
+        IpProtocol: tcp
+        FromPort: 53
+        ToPort: 53
+        CidrIp: 0.0.0.0/0
+        Description: "DNS resolution (VPC resolver)"
+    LambdaEgressDnsUdp:
+      Type: AWS::EC2::SecurityGroupEgress
+      Properties:
+        GroupId: !Ref LambdaSecurityGroup
+        IpProtocol: udp
+        FromPort: 53
+        ToPort: 53
+        CidrIp: 0.0.0.0/0
+        Description: "DNS resolution (VPC resolver)"
     RdsSubnetGroup:
       Type: AWS::RDS::DBSubnetGroup
       Properties:
@@ -384,6 +426,7 @@ resources:
         DeletionProtection: true
         BackupRetentionPeriod: 7
         MultiAZ: false
+        StorageEncrypted: true
     RDSCL:
       Type: AWS::RDS::DBInstance
       DependsOn: SecretsInitCustom
@@ -404,6 +447,7 @@ resources:
         DeletionProtection: true
         BackupRetentionPeriod: 7
         MultiAZ: false
+        StorageEncrypted: true
     RDSPEHostParam:
       Type: AWS::SSM::Parameter
       Properties:
@@ -430,6 +474,7 @@ resources:
       Type: AWS::SNS::Topic
       Properties:
         TopicName: ${self:service}-alarms
+        KmsMasterKeyId: alias/aws/sns
 
     AlarmsTopicPolicy:
       Type: AWS::SNS::TopicPolicy
